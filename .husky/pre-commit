@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+# Husky pre-commit hook — runs on every `git commit`
+# VU-S2: secret scan; SC-F2: lint gate
+pnpm exec lint-staged
+
+# VU-S2: gitleaks staged-file secret scan (skip gracefully if not installed locally;
+# CI always enforces this via `gitleaks detect --source . --redact` in gates.conf)
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact
+else
+  echo "⚠  gitleaks not found — install it so VU-S2 runs locally (CI enforces it)."
+  echo "   Windows: winget install gitleaks   or   https://github.com/gitleaks/gitleaks/releases"
+fi

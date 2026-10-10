@@ -1,0 +1,31 @@
+# Mobile builds. One codebase, three store apps via APP_VARIANT. See PIPELINE.md §6.
+name: eas-build
+on:
+  workflow_dispatch:
+    inputs:
+      variant:  { description: passenger | driver | admin, required: true, default: passenger }
+      profile:  { description: development | preview | production, required: true, default: preview }
+      platform: { description: ios | android | all, required: true, default: android }
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Production builds require passed gates 9 (hardening)
+        if: inputs.profile == 'production'
+        run: |
+          if [ ! -f signoff/phase-9.passed ]; then
+            echo "BLOCKED - Gate 9 has not passed"
+            exit 1
+          fi
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - uses: expo/expo-github-action@v8
+        with: { eas-version: latest, token: '${{ secrets.EXPO_TOKEN }}' }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @redtaxi/mobile exec eas build --non-interactive --profile ${{ inputs.profile }} --platform ${{ inputs.platform }}
+        env:
+          APP_VARIANT: ${{ inputs.variant }}

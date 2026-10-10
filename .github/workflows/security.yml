@@ -1,0 +1,61 @@
+# Automated parts of VULNERABILITY.md (VU-S1..S5, S7) and the Security Check smoke. See PIPELINE.md §4.
+# NOTE: pin third-party actions to commit SHAs and verify current versions before use.
+name: security
+on:
+  pull_request:
+  schedule:
+    - cron: '0 3 * * 1'     # weekly: dependencies, secrets, containers
+  workflow_dispatch:
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: read
+
+jobs:
+  secrets:               # VU-S2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: gitleaks/gitleaks-action@v2
+        env: { GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+
+  dependencies:          # VU-S1, VU-S7
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --prod --audit-level=high
+      - run: npx @cyclonedx/cyclonedx-npm --output-file sbom.json
+      - uses: actions/upload-artifact@v4
+        with: { name: sbom, path: sbom.json }
+      - uses: actions/dependency-review-action@v4
+        if: github.event_name == 'pull_request'
+
+  sast:                  # VU-S3
+    runs-on: ubuntu-latest
+    container: { image: semgrep/semgrep }
+    steps:
+      - uses: actions/checkout@v4
+      - run: semgrep --config p/owasp-top-ten --config p/typescript --config p/react --error
+
+  config-scan:           # VU-S4
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@master      # pin to a release SHA in real use
+        with: { scan-type: fs, severity: 'HIGH,CRITICAL', exit-code: '1', scanners: 'vuln,secret,misconfig' }
+
+  dast-staging:          # VU-S5 + SECURITY_CHECK smoke, staging only, manual or scheduled window
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Security smoke (SECURITY_CHECK.md automatable subset)
+        run: WEB='${{ vars.STAGING_WEB_URL }}' API='${{ vars.STAGING_API_URL }}' bash scripts/security-smoke.sh
+      - name: ZAP baseline
+        uses: zaproxy/action-baseline@v0.12.0
+        with: { target: '${{ vars.STAGING_WEB_URL }}' }

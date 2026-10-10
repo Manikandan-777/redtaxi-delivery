@@ -1,0 +1,54 @@
+# ── Node / pnpm ──────────────────────────────────────────────────────────────
+node_modules/
+.pnpm-debug.log*
+.pnpm-store/
+
+# ── Next.js ──────────────────────────────────────────────────────────────────
+apps/web/.next/
+apps/web/out/
+# next-env.d.ts is committed (Next.js regenerates it; do not remove)
+
+# ── Expo / React Native ───────────────────────────────────────────────────────
+apps/mobile/.expo/
+apps/mobile/android/
+apps/mobile/ios/
+
+# ── Build outputs ─────────────────────────────────────────────────────────────
+dist/
+build/
+
+# ── Test coverage ─────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── TypeScript incremental build info ────────────────────────────────────────
+*.tsbuildinfo
+
+# ── Environment variables (SC-D6: never commit secrets) ──────────────────────
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+# Keep .env.example committed
+!.env.example
+
+# ── OS-specific ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── EAS / Expo build ──────────────────────────────────────────────────────────
+*.ipa
+*.apk
+*.aab
