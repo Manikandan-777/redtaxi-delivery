@@ -6,11 +6,13 @@ import { StyleSheet, Text, View } from "react-native";
  * promo banner, and location permission handling.
  * @see IMPLEMENTATION.md §Phase 4, task 4.9
  */
+import { inr } from "@redtaxi/shared";
+
 export default function IndexScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>RedTaxi</Text>
-      <Text style={styles.subtitle}>Phase 0 scaffold — real UI ships in Phase 4.</Text>
+      <Text style={styles.subtitle}>Fares starting from {inr(149400)}</Text>
     </View>
   );
 }

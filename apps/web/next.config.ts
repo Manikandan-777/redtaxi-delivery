@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  // Phase 2: add transpilePackages: ["@redtaxi/shared"] when shared code is imported
+  transpilePackages: ["@redtaxi/shared"],
   // Phase 2: add headers() for CSP baseline (SC-D2)
 };
 
