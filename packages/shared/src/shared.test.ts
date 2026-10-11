@@ -15,6 +15,10 @@ import {
   LoginOtpSchema,
   RideStartOtpSchema,
   type BookingStatus,
+  colors,
+  parseHexColor,
+  contrastRatio,
+  minTouchTarget,
 } from "./index";
 
 describe("packages/shared unit test suite", () => {
@@ -281,6 +285,58 @@ describe("packages/shared unit test suite", () => {
       expect(RideStartOtpSchema.safeParse("432").success).toBe(false);
       expect(RideStartOtpSchema.safeParse("43210").success).toBe(false);
       expect(RideStartOtpSchema.safeParse("432a").success).toBe(false);
+    });
+  });
+
+  describe("T2.1 & T2.5: Design System Tokens & WCAG Contrast Rules", () => {
+    it("exports all defined brand, neutral, and semantic colors", () => {
+      expect(colors.accent).toBe("#6969EF");
+      expect(colors.accentLight).toBe("#7D7DFF");
+      expect(colors.surface).toBe("#D3D3FF");
+      expect(colors.bgDark).toBe("#C6C6FF");
+      expect(colors.background).toBe("#F5F6F4");
+      expect(colors.white).toBe("#FFFFFF");
+      expect(colors.ink).toBe("#000344");
+      expect(colors.body).toBe("#424242");
+      expect(colors.muted).toBe("#A6A7BE");
+      expect(colors.success).toBe("#50FF97");
+      expect(colors.danger).toBe("#E5484D");
+      expect(colors.warning).toBe("#F5A524");
+      expect(colors.star).toBe("#FFB400");
+      expect(minTouchTarget).toBe(44);
+    });
+
+    it("parses hex colors correctly into RGB", () => {
+      const rgb = parseHexColor("#6969EF");
+      expect(rgb).toEqual({ r: 0x69, g: 0x69, b: 0xef });
+      const white = parseHexColor("#FFFFFF");
+      expect(white).toEqual({ r: 255, g: 255, b: 255 });
+    });
+
+    it("T2.5: Body text on background satisfies WCAG AA >= 4.5:1", () => {
+      const ratio = contrastRatio(colors.body, colors.background);
+      expect(ratio).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it("T2.5: Ink (headings) on background satisfies WCAG AAA >= 7.0:1", () => {
+      const ratio = contrastRatio(colors.ink, colors.background);
+      expect(ratio).toBeGreaterThanOrEqual(7.0);
+    });
+
+    it("T2.5: Ink on surface satisfies WCAG AA >= 4.5:1", () => {
+      const ratio = contrastRatio(colors.ink, colors.surface);
+      expect(ratio).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it("T2.5: White on accent is acceptable for large/bold text only (>= 3:1, < 4.5:1)", () => {
+      const ratio = contrastRatio(colors.white, colors.accent);
+      expect(ratio).toBeGreaterThanOrEqual(3.0);
+      expect(ratio).toBeLessThan(4.5);
+    });
+
+    it("T2.5: Muted text on background is < 4.5:1 (enforcing rule: never muted for essential text)", () => {
+      const ratio = contrastRatio(colors.muted, colors.background);
+      expect(ratio).toBeLessThan(4.5);
     });
   });
 });

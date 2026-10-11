@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #F5F6F4;
+  --foreground: #424242;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Ensure focus-visible is clear and accessible across all interactive elements */
+*:focus-visible {
+  outline: 2px solid #6969EF;
+  outline-offset: 2px;
+}

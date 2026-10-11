@@ -3,11 +3,11 @@
  * Master barrel export
  */
 
-export * from "./domain";
-export * from "./fare";
-export * from "./deposit";
-export * from "./rideMachine";
-export * from "./format";
-export * from "./tokens";
-export * from "./socketEvents";
-export * from "./schemas";
+export * from "./domain.js";
+export * from "./fare.js";
+export * from "./deposit.js";
+export * from "./rideMachine.js";
+export * from "./format.js";
+export * from "./tokens.js";
+export * from "./socketEvents.js";
+export * from "./schemas.js";

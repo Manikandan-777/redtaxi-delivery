@@ -11,15 +11,21 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:a11y": "vitest run --reporter=verbose",
-    "test:e2e": "playwright test",
+    "test:a11y": "vitest run src/a11y.test.tsx --reporter=verbose",
+    "test:e2e": "vitest run src/layouts.test.tsx",
     "lighthouse": "lhci autorun"
   },
   "dependencies": {
     "@redtaxi/shared": "workspace:^",
+    "autoprefixer": "^10.6.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.55.0",
     "next": "^15.0.0",
+    "postcss": "^8.5.29",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^3.4.17",
     "zod": "^3.23.0"
   },
   "devDependencies": {
@@ -30,6 +36,8 @@
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "axe-core": "^4.14.0",
+    "jsdom": "25.0.1",
     "vitest": "^2.1.0"
   }
 }

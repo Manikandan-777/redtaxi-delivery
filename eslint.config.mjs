@@ -2,6 +2,7 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import globals from "globals";
+import reactPlugin from "eslint-plugin-react";
 
 export default tseslint.config(
   // ── Global ignores ──────────────────────────────────────────────────────────
@@ -37,6 +38,9 @@ export default tseslint.config(
 
   // ── Project-wide rule overrides ──────────────────────────────────────────────
   {
+    plugins: {
+      react: reactPlugin,
+    },
     rules: {
       // Unused variables: allow underscore-prefixed names
       "@typescript-eslint/no-unused-vars": [
@@ -50,8 +54,8 @@ export default tseslint.config(
       ],
       // Discourage console.log in production code; warn/error/info are fine
       "no-console": ["warn", { allow: ["warn", "error", "info"] }],
-      // SC-H2 (Phase 2): dangerouslySetInnerHTML ban — added now, enforced from day 0
-      // react/no-danger rule added in Phase 2 when eslint-plugin-react is installed
+      // SC-H2 & T2.12: dangerouslySetInnerHTML ban — strictly enforced
+      "react/no-danger": "error",
     },
-  },
+  }
 );
