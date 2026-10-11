@@ -14,9 +14,28 @@ import {
 } from "@redtaxi/shared";
 import { SEED_PRICING_RULES, SEED_VEHICLES, SEED_DRIVER } from "./seed";
 
+// Allowed origins for SC-D4 CORS
+const ALLOWED_ORIGINS = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "https://redtaxi.internal",
+  "http://localhost:8081",
+];
+
 export function createMockApp() {
   const app = express();
-  app.use(cors());
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(null, false);
+        }
+      },
+      credentials: true,
+    })
+  );
   app.use(express.json());
 
   // In-memory store
@@ -25,6 +44,31 @@ export function createMockApp() {
   const pricingRules = new Map<VehicleClass, PricingRule>(
     SEED_PRICING_RULES.map((r) => [r.vehicleClass, r])
   );
+
+  // Auth helper for SC-B1 role walls on API
+  const requireApiAuth = (allowedRoles: string[]) => {
+    return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      const auth = req.headers.authorization;
+      if (!auth || !auth.startsWith("Bearer ")) {
+        return res
+          .status(401)
+          .json({ code: "UNAUTHORIZED", message: "Missing authorization token" });
+      }
+      const token = auth.slice(7);
+      // For mock API: accept valid role mock tokens or demo tokens
+      if (token.includes("admin") && allowedRoles.includes("admin")) {
+        return next();
+      }
+      if (token.includes("driver") && allowedRoles.includes("driver")) {
+        return next();
+      }
+      if (token.includes("passenger") && allowedRoles.includes("passenger")) {
+        return next();
+      }
+      // Or valid JWT structure test
+      return res.status(403).json({ code: "FORBIDDEN", message: "Forbidden" });
+    };
+  };
 
   // ── Vehicles & Tariff ──────────────────────────────────────────────────────
   app.get("/vehicles", (_req, res) => {
@@ -163,7 +207,7 @@ export function createMockApp() {
     return res.status(201).json(booking);
   });
 
-  app.get("/bookings", (_req, res) => {
+  app.get("/bookings", requireApiAuth(["passenger", "driver", "admin"]), (_req, res) => {
     return res.json(Array.from(bookings.values()));
   });
 
@@ -202,8 +246,8 @@ export function createMockApp() {
     return res.json(booking);
   });
 
-  // ── Driver & Admin Stats ───────────────────────────────────────────────────
-  app.get("/admin/stats", (_req, res) => {
+  // ── Protected Admin Endpoints (SC-B1) ──────────────────────────────────────
+  app.get("/admin/stats", requireApiAuth(["admin"]), (_req, res) => {
     res.json({
       totalBookingsToday: 342,
       activeRides: 14,
@@ -212,6 +256,34 @@ export function createMockApp() {
       completedToday: 310,
     });
   });
+
+  app.get("/admin/drivers", requireApiAuth(["admin"]), (_req, res) => {
+    res.json([SEED_DRIVER]);
+  });
+
+  // ── Protected Driver Endpoints (SC-B1) ─────────────────────────────────────
+  app.get("/driver/stats", requireApiAuth(["driver", "admin"]), (_req, res) => {
+    res.json({
+      todayTrips: 4,
+      todayEarnings: 245000,
+      rating: 4.9,
+    });
+  });
+
+  // SC-H3: Custom error handler to prevent internal stack traces leaking
+  app.use(
+    (
+      err: Error & { status?: number },
+      _req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction
+    ) => {
+      return res.status(err.status || 500).json({
+        code: "INTERNAL_ERROR",
+        message: err.message || "An unexpected error occurred",
+      });
+    }
+  );
 
   return app;
 }

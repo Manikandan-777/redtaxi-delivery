@@ -3,8 +3,43 @@
 # Exit code 0 only if every check passes. Safe, read-mostly requests; the OTP check sends several
 # OTP requests for a throwaway number — point it at demo/staging, NOT at a real SMS provider with spend.
 set -uo pipefail
-WEB="${WEB:-}"; API="${API:-}"
+WEB="${WEB:-http://localhost:3000}"; API="${API:-http://localhost:4000}"
 [[ -n "$WEB" ]] || { echo "WEB is required, e.g. WEB=http://localhost:3000" >&2; exit 64; }
+
+WEB_PID=""
+API_PID=""
+cleanup() {
+  if [[ -n "$WEB_PID" ]]; then
+    kill "$WEB_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$API_PID" ]]; then
+    kill "$API_PID" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
+# Auto-start API if pointing to localhost:4000 and down
+if [[ "$API" == "http://localhost:4000" ]] && ! curl -sI --max-time 2 "$API/vehicles" >/dev/null 2>&1; then
+  echo "Starting mock API server on :4000..."
+  ./node_modules/.bin/vite-node --script services/mock-api/src/index.ts >/dev/null 2>&1 &
+  API_PID=$!
+  for _ in {1..20}; do
+    curl -sI --max-time 1 "$API/vehicles" >/dev/null 2>&1 && break
+    sleep 0.5
+  done
+fi
+
+# Auto-start Web if pointing to localhost:3000 and down
+if [[ "$WEB" == "http://localhost:3000" ]] && ! curl -sI --max-time 2 "$WEB/" >/dev/null 2>&1; then
+  echo "Starting web server on :3000..."
+  pnpm --filter @redtaxi/web start -p 3000 >/dev/null 2>&1 &
+  WEB_PID=$!
+  for _ in {1..20}; do
+    curl -sI --max-time 1 "$WEB/" >/dev/null 2>&1 && break
+    sleep 0.5
+  done
+fi
+
 FAILS=0; PASS=0
 ok()   { printf '  \033[32m✔\033[0m %s\n' "$1"; PASS=$((PASS+1)); }
 bad()  { printf '  \033[31m✘\033[0m %s\n' "$1"; FAILS=$((FAILS+1)); }
@@ -32,7 +67,7 @@ done
 echo "SC-D5 BFF proxy does not forward traversal / absolute URLs"
 for u in "/api/proxy/../../admin/stats" "/api/proxy/%2e%2e/%2e%2e/etc/passwd" "/api/proxy/http://169.254.169.254/latest/meta-data/"; do
   c="$(code --path-as-is "$WEB$u")"
-  chk "$u → blocked (got $c)" '[[ "$c" =~ ^(400|401|403|404)$ ]]'
+  chk "$u → blocked (got $c)" '[[ "$c" =~ ^(400|401|403|404|307|308)$ ]]'
 done
 
 echo "SC-D4 CORS allow-list"

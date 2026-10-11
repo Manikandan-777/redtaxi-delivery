@@ -18,6 +18,7 @@ const cspHeader = `
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  skipTrailingSlashRedirect: true,
   transpilePackages: ["@redtaxi/shared"],
   async headers() {
     return [
