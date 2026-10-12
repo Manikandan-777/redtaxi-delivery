@@ -465,12 +465,402 @@ export function createMockApp() {
     res.json([SEED_DRIVER]);
   });
 
-  // ── Protected Driver Endpoints (SC-B1) ─────────────────────────────────────
+  // ── Protected Driver Endpoints (SC-B1 & Phase 6) ─────────────────────────
+  interface DriverDoc {
+    id: string;
+    documentType: "license" | "rc" | "insurance";
+    status: "pending" | "approved" | "rejected";
+    fileUrl?: string;
+  }
+
+  const driverState = {
+    id: SEED_DRIVER.id,
+    name: SEED_DRIVER.name,
+    phone: SEED_DRIVER.phone,
+    rating: SEED_DRIVER.rating,
+    vehicleNo: SEED_DRIVER.vehicleNo,
+    vehicleClass: SEED_DRIVER.vehicleClass,
+    online: true,
+    status: SEED_DRIVER.status,
+    bankAccountNumber: "•••• •••• •••• 4321", // T6.12 & SC-F3: masked in all representations
+    documents: [
+      { id: "doc_lic_1", documentType: "license", status: "approved" },
+      { id: "doc_rc_1", documentType: "rc", status: "approved" },
+      { id: "doc_ins_1", documentType: "insurance", status: "approved" },
+    ] as DriverDoc[],
+  };
+
+  // Offers in memory
+  interface DriverOffer {
+    id: string;
+    bookingId: string;
+    expiresAt: string;
+    pickup: { label: string; lat: number; lng: number };
+    drop: { label: string; lat: number; lng: number };
+    fare: number; // paise
+    claimedBy?: string;
+  }
+
+  const offers = new Map<string, DriverOffer>();
+  // Seed sample offer (45s window)
+  const defaultOffer: DriverOffer = {
+    id: "off_seed_101",
+    bookingId: "bk_seed_offer_1",
+    expiresAt: new Date(Date.now() + 45 * 1000).toISOString(),
+    pickup: { label: "124 Cross Cut Road, Gandhipuram", lat: 11.0168, lng: 76.9558 },
+    drop: { label: "Coimbatore International Airport", lat: 11.029, lng: 77.043 },
+    fare: 149400, // ₹1,494 in paise
+  };
+  offers.set(defaultOffer.id, defaultOffer);
+
+  // OTP attempts tracker: bookingId -> attemptCount (max 5)
+  const otpAttempts = new Map<string, number>();
+
+  // T6.1: Go-online blocked when any document is unverified or expired
+  app.post("/driver/online", (req, res) => {
+    const { online } = req.body;
+    if (typeof online !== "boolean") {
+      return res.status(400).json({ code: "BAD_REQUEST", message: "online boolean required" });
+    }
+
+    const hasUnverifiedDocs = driverState.documents.some((d) => d.status !== "approved");
+    if (online && hasUnverifiedDocs) {
+      return res.status(403).json({
+        code: "DOCUMENTS_UNVERIFIED",
+        message:
+          "Cannot go online. All vehicle and identity documents must be verified and approved.",
+      });
+    }
+
+    driverState.online = online;
+    return res.json({ online: driverState.online });
+  });
+
+  // T6.1 & Stats (SC-B1 role wall)
   app.get("/driver/stats", requireApiAuth(["driver", "admin"]), (_req, res) => {
-    res.json({
+    return res.json({
       todayTrips: 4,
       todayEarnings: 245000,
-      rating: 4.9,
+      hoursOnline: 6.5,
+      rating: driverState.rating,
+      online: driverState.online,
+    });
+  });
+
+  // T6.2: Offer countdown using server expiresAt
+  app.get("/driver/offers/:id", (req, res) => {
+    const offer = offers.get(req.params.id);
+    if (!offer) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "Offer not found" });
+    }
+    return res.json(offer);
+  });
+
+  // T6.3: Accept incoming offer with concurrency / race resolution (409 if claimed)
+  app.post("/offers/:id/accept", (req, res) => {
+    const offer = offers.get(req.params.id);
+    if (!offer) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "Offer not found" });
+    }
+
+    // Check expiry
+    if (new Date(offer.expiresAt).getTime() < Date.now()) {
+      return res.status(410).json({
+        code: "OFFER_EXPIRED",
+        message: "This offer has expired.",
+      });
+    }
+
+    // Concurrency / Race handling (T6.3)
+    if (offer.claimedBy) {
+      return res.status(409).json({
+        code: "OFFER_ALREADY_CLAIMED",
+        message: "Trip no longer available. Accepted by another driver.",
+      });
+    }
+
+    // Claim the offer
+    offer.claimedBy = driverState.id;
+
+    // Fetch or create booking
+    let booking = bookings.get(offer.bookingId);
+    if (!booking) {
+      const bookingId = offer.bookingId;
+      booking = {
+        id: bookingId,
+        code: "BK10234",
+        customer: { id: "cust_1", name: "Anand" }, // T6.14: masked/no direct phone
+        pickup: offer.pickup,
+        drop: offer.drop,
+        startsAt: new Date().toISOString(),
+        status: "driver_assigned",
+        quote: {
+          id: "qt_seed_1",
+          vehicleId: "veh_sedan_1",
+          mode: "one_way",
+          distanceKm: 65.2,
+          durationMin: 85,
+          lines: [],
+          total: paise(offer.fare),
+          depositOptions: [],
+          validUntil: new Date(Date.now() + 900000).toISOString(),
+        },
+        driver: {
+          id: driverState.id,
+          name: driverState.name,
+          rating: driverState.rating,
+          vehicleNo: driverState.vehicleNo,
+          vehicleClass: driverState.vehicleClass,
+        },
+        startOtp: "4321",
+        paid: paise(50000), // ₹500
+        due: paise(99400), // ₹994
+        timeline: [
+          { status: "created", at: new Date().toISOString() },
+          { status: "driver_assigned", at: new Date().toISOString() },
+        ],
+      };
+      bookings.set(bookingId, booking);
+    } else {
+      booking.status = "driver_assigned";
+      booking.driver = {
+        id: driverState.id,
+        name: driverState.name,
+        rating: driverState.rating,
+        vehicleNo: driverState.vehicleNo,
+        vehicleClass: driverState.vehicleClass,
+      };
+      booking.timeline.push({ status: "driver_assigned", at: new Date().toISOString() });
+    }
+
+    return res.json(booking);
+  });
+
+  // Decline offer
+  app.post("/offers/:id/decline", (req, res) => {
+    const offer = offers.get(req.params.id);
+    if (!offer) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "Offer not found" });
+    }
+    return res.json({ declined: true, id: offer.id });
+  });
+
+  // T6.3 / WD4: Mark driver arrived
+  app.post("/bookings/:id/arrived", (req, res) => {
+    const booking = bookings.get(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "Booking not found" });
+    }
+    booking.status = "driver_arrived";
+    booking.timeline.push({ status: "driver_arrived", at: new Date().toISOString() });
+    return res.json(booking);
+  });
+
+  // T6.4 & T6.5: Verify 4-digit start OTP with 5 attempts limit
+  app.post("/bookings/:id/start", (req, res) => {
+    const booking = bookings.get(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "Booking not found" });
+    }
+
+    const { otp } = req.body;
+    if (!otp || typeof otp !== "string" || !/^\d{4}$/.test(otp)) {
+      return res.status(400).json({
+        code: "INVALID_FORMAT",
+        message: "Start OTP must be exactly 4 numeric digits",
+      });
+    }
+
+    const attempts = (otpAttempts.get(booking.id) || 0) + 1;
+    otpAttempts.set(booking.id, attempts);
+
+    if (attempts > 5) {
+      return res.status(400).json({
+        code: "OTP_LOCKED",
+        message: "Too many failed attempts. Trip verification locked. Contact dispatch support.",
+      });
+    }
+
+    const expectedOtp = booking.startOtp || "4321";
+    if (otp !== expectedOtp) {
+      return res.status(400).json({
+        code: "INCORRECT_OTP",
+        message: `Incorrect OTP. Attempt ${attempts} of 5.`,
+        attemptsRemaining: 5 - attempts,
+      });
+    }
+
+    // Correct OTP -> Transition to in_progress
+    booking.status = "in_progress";
+    booking.timeline.push({ status: "in_progress", at: new Date().toISOString() });
+    return res.json(booking);
+  });
+
+  // T6.6 & T6.7: Complete trip with numeric odometer; compute amountToCollect = total - paid
+  app.post("/bookings/:id/complete", (req, res) => {
+    const booking = bookings.get(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "Booking not found" });
+    }
+
+    const { odometer } = req.body;
+    if (odometer === undefined || typeof odometer !== "number" || isNaN(odometer) || odometer < 0) {
+      return res.status(400).json({
+        code: "INVALID_ODOMETER",
+        message: "Odometer must be a valid non-negative number.",
+      });
+    }
+
+    booking.status = "completed";
+    booking.timeline.push({ status: "completed", at: new Date().toISOString() });
+
+    // DEC-1 & DEC-10: amountToCollect = total - paid
+    const totalAmount = booking.quote?.total ?? paise(149400);
+    const paidAmount = booking.paid ?? paise(50000);
+    const amountToCollect = paise(Math.max(0, totalAmount - paidAmount)); // ₹994 (99400 paise)
+
+    return res.json({
+      booking,
+      amountToCollect,
+      odometer,
+    });
+  });
+
+  // T6.10: Earnings report by range (today/week/month)
+  app.get("/driver/earnings", (req, res) => {
+    const range = (req.query.range as string) || "week";
+
+    if (range === "today") {
+      return res.json({
+        range: "today",
+        totalEarnings: 245000, // ₹2,450
+        tripsCount: 4,
+        onlineHours: 6.5,
+        history: [{ date: "Today", amount: 245000 }],
+      });
+    }
+
+    if (range === "month") {
+      return res.json({
+        range: "month",
+        totalEarnings: 4850000, // ₹48,500
+        tripsCount: 92,
+        onlineHours: 148,
+        history: [
+          { date: "Week 1", amount: 1200000 },
+          { date: "Week 2", amount: 1150000 },
+          { date: "Week 3", amount: 1300000 },
+          { date: "Week 4", amount: 1200000 },
+        ],
+      });
+    }
+
+    // Default: week (Mon–Sun)
+    return res.json({
+      range: "week",
+      totalEarnings: 1245000, // ₹12,450
+      tripsCount: 22,
+      onlineHours: 34.5,
+      history: [
+        { date: "Mon", amount: 180000 },
+        { date: "Tue", amount: 155000 },
+        { date: "Wed", amount: 210000 },
+        { date: "Thu", amount: 195000 },
+        { date: "Fri", amount: 240000 },
+        { date: "Sat", amount: 165000 },
+        { date: "Sun", amount: 100000 },
+      ],
+    });
+  });
+
+  // T6.12: Driver profile with masked bank account
+  app.get("/driver/profile", (_req, res) => {
+    return res.json({
+      id: driverState.id,
+      name: driverState.name,
+      phone: driverState.phone,
+      vehicleNo: driverState.vehicleNo,
+      vehicleClass: driverState.vehicleClass,
+      bankAccountNumberMasked: driverState.bankAccountNumber,
+      documents: driverState.documents,
+      rating: driverState.rating,
+      online: driverState.online,
+    });
+  });
+
+  app.put("/driver/profile", (req, res) => {
+    const { name } = req.body;
+    if (name && typeof name === "string") {
+      driverState.name = name;
+    }
+    return res.json({ success: true, name: driverState.name });
+  });
+
+  // T6.11: Document upload with validation
+  app.post("/driver/documents", (req, res) => {
+    const { documentType, fileName, fileBase64, fileSize } = req.body;
+
+    if (!["license", "rc", "insurance"].includes(documentType)) {
+      return res.status(400).json({
+        code: "INVALID_DOC_TYPE",
+        message: "documentType must be license, rc, or insurance",
+      });
+    }
+
+    // Check size limit: 10 MB
+    if (fileSize && fileSize > 10 * 1024 * 1024) {
+      return res.status(400).json({
+        code: "FILE_TOO_LARGE",
+        message: "Document file exceeds 10MB limit.",
+      });
+    }
+
+    // Check extension & magic bytes / header
+    if (fileName) {
+      const lower = fileName.toLowerCase();
+      if (lower.endsWith(".exe") || lower.endsWith(".html") || lower.endsWith(".js")) {
+        return res.status(400).json({
+          code: "INVALID_FILE_TYPE",
+          message: "Executable or dangerous file types rejected.",
+        });
+      }
+    }
+
+    if (fileBase64 && typeof fileBase64 === "string") {
+      // Magic bytes validation check
+      // PDF: %PDF (25 50 44 46) -> JVBERi
+      // PNG: \x89PNG -> iVBOR
+      // JPEG: \xFF\xD8 -> /9j/
+      const isAllowedMagic =
+        fileBase64.startsWith("JVBERi") ||
+        fileBase64.startsWith("iVBOR") ||
+        fileBase64.startsWith("/9j/");
+
+      if (!isAllowedMagic) {
+        return res.status(400).json({
+          code: "MAGIC_BYTE_MISMATCH",
+          message: "File magic bytes mismatch. Only valid PDF, PNG, or JPEG permitted.",
+        });
+      }
+    }
+
+    // Update document status to pending/approved
+    const docIdx = driverState.documents.findIndex((d) => d.documentType === documentType);
+    const existingDoc = driverState.documents[docIdx];
+    if (existingDoc) {
+      existingDoc.status = "approved";
+    } else {
+      driverState.documents.push({
+        id: `doc_${Date.now()}`,
+        documentType,
+        status: "approved",
+      });
+    }
+
+    return res.json({
+      id: `doc_${documentType}_${Date.now()}`,
+      status: "approved",
+      message: `${documentType} successfully uploaded and verified.`,
     });
   });
 
