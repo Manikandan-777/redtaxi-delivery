@@ -52,3 +52,6 @@ logs/
 *.ipa
 *.apk
 *.aab
+
+Student_Photos/
+fa.pdf
