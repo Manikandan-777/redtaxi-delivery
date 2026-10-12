@@ -207,6 +207,98 @@ export function createMockApp() {
     return res.status(201).json(booking);
   });
 
+  // ── Payments (Razorpay Mock) ───────────────────────────────────────────────
+  const paymentOrders = new Map<
+    string,
+    { orderId: string; amount: number; quoteId: string; paymentOption: string }
+  >();
+
+  app.post("/payments/orders", (req, res) => {
+    const { quoteId, paymentOption, idempotencyKey: _idempotencyKey } = req.body;
+    if (!quoteId || !paymentOption) {
+      return res
+        .status(400)
+        .json({ code: "BAD_REQUEST", message: "quoteId and paymentOption required" });
+    }
+
+    const quote = quotes.get(quoteId);
+    if (!quote) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "Quote not found" });
+    }
+
+    const deposit = quote.depositOptions.find((d) => d.type === paymentOption);
+    if (!deposit) {
+      return res
+        .status(400)
+        .json({ code: "INVALID_PAYMENT_OPTION", message: "Invalid payment option" });
+    }
+
+    const orderId = `order_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const order = {
+      orderId,
+      amount: deposit.payNow,
+      currency: "INR",
+      quoteId,
+      paymentOption,
+    };
+    paymentOrders.set(orderId, order);
+    return res.json({ orderId, amount: deposit.payNow, currency: "INR" });
+  });
+
+  app.post("/payments/verify", (req, res) => {
+    const { orderId, paymentId, signature, quoteId } = req.body;
+    if (!orderId || !paymentId || !signature || !quoteId) {
+      return res
+        .status(400)
+        .json({ code: "BAD_REQUEST", message: "Missing payment verification parameters" });
+    }
+
+    const order = paymentOrders.get(orderId);
+    if (!order) {
+      return res.status(404).json({ code: "ORDER_NOT_FOUND", message: "Order not found" });
+    }
+
+    const quote = quotes.get(quoteId);
+    if (!quote) {
+      return res.status(404).json({ code: "QUOTE_NOT_FOUND", message: "Quote not found" });
+    }
+
+    // Verify mock signature (accept test-mode signature or valid string)
+    if (!signature.startsWith("sig_") && signature !== "valid_signature") {
+      return res
+        .status(400)
+        .json({ code: "INVALID_SIGNATURE", message: "Invalid Razorpay payment signature" });
+    }
+
+    const depositFallback = quote.depositOptions[0] || { payNow: quote.total, payAtDrop: paise(0) };
+    const selectedDeposit =
+      quote.depositOptions.find((d) => d.type === order.paymentOption) || depositFallback;
+    const bookingId = `bk_${Date.now()}`;
+    const code = `BK${Math.floor(10000 + Math.random() * 90000)}`;
+
+    const booking: Booking = {
+      id: bookingId,
+      code,
+      customer: {
+        id: "cust_1",
+        name: "Anand",
+        phone: "9876543210",
+      },
+      pickup: { label: "Pollachi Town", lat: 10.658, lng: 77.008 },
+      drop: { label: "Coimbatore Airport", lat: 11.029, lng: 77.043 },
+      startsAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+      status: "created",
+      quote,
+      startOtp: "4321",
+      paid: selectedDeposit.payNow,
+      due: selectedDeposit.payAtDrop,
+      timeline: [{ status: "created", at: new Date().toISOString() }],
+    };
+
+    bookings.set(bookingId, booking);
+    return res.json({ success: true, booking });
+  });
+
   app.get("/bookings", requireApiAuth(["passenger", "driver", "admin"]), (_req, res) => {
     return res.json(Array.from(bookings.values()));
   });

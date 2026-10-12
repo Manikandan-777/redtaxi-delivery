@@ -45,6 +45,7 @@ export interface Vehicle {
   minKm: number;
   imageUrl: string;
   popular?: boolean;
+  available?: boolean;
 }
 
 export interface FareLine {
