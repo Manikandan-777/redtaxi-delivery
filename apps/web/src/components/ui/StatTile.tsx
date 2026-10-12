@@ -1,16 +1,20 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 
-export interface StatTileProps {
+export interface StatTileProps extends React.HTMLAttributes<HTMLDivElement> {
   label: string;
   value: string | number;
-  subtext?: string;
+  subtext?: string | undefined;
   icon?: React.ReactNode;
-  trend?: {
-    value: string;
-    isPositive?: boolean;
-  };
-  className?: string;
+  trend?:
+    | string
+    | {
+        value: string;
+        isPositive?: boolean;
+      }
+    | undefined;
+  className?: string | undefined;
+  "data-testid"?: string;
 }
 
 export const StatTile: React.FC<StatTileProps> = ({
@@ -20,9 +24,13 @@ export const StatTile: React.FC<StatTileProps> = ({
   icon,
   trend,
   className,
+  "data-testid": dataTestId,
+  ...props
 }) => {
   return (
     <div
+      data-testid={dataTestId}
+      {...props}
       className={cn(
         "rounded-xl bg-white border border-muted/30 p-5 shadow-sm flex flex-col justify-between min-w-[180px]",
         className
@@ -42,9 +50,16 @@ export const StatTile: React.FC<StatTileProps> = ({
           <div className="mt-1 flex items-center gap-2 text-xs">
             {trend && (
               <span
-                className={cn("font-semibold", trend.isPositive ? "text-success" : "text-danger")}
+                className={cn(
+                  "font-semibold",
+                  typeof trend === "string"
+                    ? "text-success"
+                    : trend.isPositive
+                      ? "text-success"
+                      : "text-danger"
+                )}
               >
-                {trend.value}
+                {typeof trend === "string" ? trend : trend.value}
               </span>
             )}
             {subtext && <span className="text-muted">{subtext}</span>}

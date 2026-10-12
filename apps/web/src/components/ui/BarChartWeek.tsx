@@ -58,6 +58,25 @@ export const BarChartWeek: React.FC<BarChartWeekProps> = ({
           );
         })}
       </div>
+
+      {/* Accessible Table Fallback (T6.10 / WCAG) */}
+      <table className="sr-only" aria-label={`${title} Data Table`}>
+        <caption>{title}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Day</th>
+            <th scope="col">Trips</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((item) => (
+            <tr key={item.day}>
+              <td>{item.day}</td>
+              <td>{item.trips}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 };

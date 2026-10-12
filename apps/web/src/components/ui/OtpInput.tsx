@@ -5,7 +5,7 @@ export interface OtpInputProps {
   length?: 4 | 6;
   value?: string;
   onChange?: (value: string) => void;
-  error?: string;
+  error?: string | undefined;
   disabled?: boolean;
   loading?: boolean;
   autoFocus?: boolean;

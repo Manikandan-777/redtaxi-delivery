@@ -8,6 +8,7 @@ export interface ToggleProps {
   disabled?: boolean;
   className?: string;
   id?: string;
+  "data-testid"?: string;
 }
 
 export const Toggle: React.FC<ToggleProps> = ({
@@ -17,6 +18,7 @@ export const Toggle: React.FC<ToggleProps> = ({
   disabled = false,
   className,
   id,
+  "data-testid": dataTestId,
 }) => {
   return (
     <label
@@ -33,6 +35,7 @@ export const Toggle: React.FC<ToggleProps> = ({
         role="switch"
         aria-checked={checked}
         disabled={disabled}
+        data-testid={dataTestId}
         onClick={() => !disabled && onChange(!checked)}
         className={cn(
           "relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
