@@ -17,9 +17,7 @@ type AppVariant = z.infer<typeof envSchema>["APP_VARIANT"];
 // Parse at config time; on error log and fall back to passenger defaults.
 // (Expo CLI will show the config object, so the error is visible in the console.)
 const envResult = envSchema.safeParse(process.env);
-const variant: AppVariant = envResult.success
-  ? envResult.data.APP_VARIANT
-  : "passenger";
+const variant: AppVariant = envResult.success ? envResult.data.APP_VARIANT : "passenger";
 
 // ── Variant helpers ───────────────────────────────────────────────────────────
 
@@ -39,10 +37,7 @@ const BUNDLE_IDS: Record<AppVariant, string> = {
 
 export default function config({ config: baseConfig }: ConfigContext): ExpoConfig {
   if (!envResult.success) {
-    console.warn(
-      "⚠ app.config.ts: invalid env vars:",
-      envResult.error.flatten().fieldErrors
-    );
+    console.warn("⚠ app.config.ts: invalid env vars:", envResult.error.flatten().fieldErrors);
   }
 
   return {
@@ -56,17 +51,36 @@ export default function config({ config: baseConfig }: ConfigContext): ExpoConfi
       supportsTablet: false,
       bundleIdentifier: BUNDLE_IDS[variant],
       // Phase 6 — DEC-16: certificate pinning declined for v1 (SC-G5)
+      infoPlist: {
+        NSLocationWhenInUseUsageDescription:
+          "RedTaxi needs your location to navigate you to passenger pickups and drops accurately.",
+        NSLocationAlwaysAndWhenInUseUsageDescription:
+          "RedTaxi requires background location updates while you are actively online and driving so passengers can track ride progress.",
+        NSCameraUsageDescription:
+          "RedTaxi uses your camera to upload driving license, RC, and insurance documents for verification.",
+        NSPhotoLibraryUsageDescription:
+          "RedTaxi accesses your photos so you can select document files for verification.",
+      },
     },
     android: {
       package: BUNDLE_IDS[variant],
       adaptiveIcon: {
         backgroundColor: "#6969EF",
       },
+      permissions: [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+      ],
     },
     plugins: ["expo-router"],
     experiments: {
       typedRoutes: true,
     },
-    // Phase 6: add permissions (location, camera, notifications) with honest iOS strings
   };
 }
