@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:a11y": "vitest run src/a11y.test.tsx --reporter=verbose",
+    "test:a11y:all": "vitest run src/a11y.test.tsx --reporter=verbose",
     "test:e2e": "vitest run",
     "test:e2e:staging": "vitest run",
     "lighthouse": "node -e \"console.log('[Lighthouse CI] Landing LCP < 2.5s (mobile profile): 1.4s (PASS)')\""
