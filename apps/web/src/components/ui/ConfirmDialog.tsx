@@ -2,7 +2,8 @@ import React, { useEffect, useRef } from "react";
 import { Button } from "./Button";
 
 export interface ConfirmDialogProps {
-  open: boolean;
+  open?: boolean;
+  isOpen?: boolean;
   title: string;
   description: string;
   confirmLabel?: string;
@@ -16,6 +17,7 @@ export interface ConfirmDialogProps {
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   open,
+  isOpen,
   title,
   description,
   confirmLabel = "Confirm",
@@ -29,8 +31,10 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
+  const isDialogOpen = open !== undefined ? open : Boolean(isOpen);
+
   useEffect(() => {
-    if (open) {
+    if (isDialogOpen) {
       previouslyFocusedRef.current = document.activeElement as HTMLElement;
 
       // Trap focus
@@ -69,7 +73,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     return undefined;
   }, [open, onCancel]);
 
-  if (!open) return null;
+  if (!isDialogOpen) return null;
 
   return (
     <div
