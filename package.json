@@ -38,7 +38,8 @@
   "scripts": {
     "prepare": "husky",
     "contract:lint": "spectral lint contracts/openapi.yaml",
-    "contract:test": "pnpm --filter @redtaxi/mock-api test"
+    "contract:test": "pnpm --filter @redtaxi/mock-api test",
+    "contract:test:staging": "pnpm --filter @redtaxi/mock-api test"
   },
   "devDependencies": {
     "@eslint/js": "^9.12.0",
