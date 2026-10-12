@@ -16,6 +16,8 @@ export function inr(amountPaise: Paise | number, fractionDigits = 0): string {
   }).format(rupees);
 }
 
+export const formatInr = inr;
+
 /**
  * Formats distance in km.
  * Example: km(65.2) -> "65.2 km"

@@ -338,6 +338,118 @@ export function createMockApp() {
     return res.json(booking);
   });
 
+  // ── Phase 5: Tracking, SOS, Share, Ratings ──────────────────────────────
+  const publicTrackingTokens = new Map<string, { bookingId: string; expiresAt: string }>();
+
+  // SOS endpoint (T5.6 & SC-E4)
+  app.post("/bookings/:id/sos", (req, res) => {
+    const booking = bookings.get(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "Booking not found" });
+    }
+    const { lat, lng } = req.body;
+    return res.json({
+      success: true,
+      alertId: `sos_${Date.now()}`,
+      bookingId: booking.id,
+      lat: lat ?? booking.pickup.lat,
+      lng: lng ?? booking.pickup.lng,
+      message: "Emergency response team and nearby drivers alerted.",
+      triggeredAt: new Date().toISOString(),
+    });
+  });
+
+  // Cancel with reason (T5.8)
+  app.post("/bookings/:id/cancel", (req, res) => {
+    const booking = bookings.get(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "Booking not found" });
+    }
+    const { reason } = req.body;
+    if (!reason || typeof reason !== "string" || !reason.trim()) {
+      return res
+        .status(400)
+        .json({ code: "BAD_REQUEST", message: "Cancellation reason is required" });
+    }
+    booking.status = "cancelled";
+    booking.timeline.push({ status: "cancelled", at: new Date().toISOString() });
+    return res.json({ success: true, booking, reason });
+  });
+
+  // Complete and Rate (T5.10 & DEC-10)
+  app.post("/bookings/:id/rate", (req, res) => {
+    const booking = bookings.get(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "Booking not found" });
+    }
+    const { stars, comment } = req.body;
+    if (typeof stars !== "number" || stars < 1 || stars > 5) {
+      return res
+        .status(400)
+        .json({ code: "BAD_REQUEST", message: "Stars rating must be between 1 and 5" });
+    }
+    if (comment && comment.length > 500) {
+      return res
+        .status(400)
+        .json({ code: "BAD_REQUEST", message: "Comment cannot exceed 500 characters" });
+    }
+    return res.json({
+      success: true,
+      bookingId: booking.id,
+      stars,
+      comment: comment || "",
+      message: "Thank you for your feedback! Ride completed.",
+    });
+  });
+
+  // Tokenised Public Share (T5.7 & VR-6)
+  app.post("/bookings/:id/share", (req, res) => {
+    const booking = bookings.get(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "Booking not found" });
+    }
+    const token = `trk_${Math.random().toString(36).slice(2, 10)}`;
+    const expiresAt = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
+    publicTrackingTokens.set(token, { bookingId: booking.id, expiresAt });
+    return res.json({
+      token,
+      shareUrl: `http://localhost:3000/t/${token}`,
+      expiresAt,
+    });
+  });
+
+  // Public Tracking View (VR-6: sanitized minimal data, zero phone/payment data)
+  app.get("/public/tracking/:token", (req, res) => {
+    const record = publicTrackingTokens.get(req.params.token);
+    if (!record) {
+      return res
+        .status(404)
+        .json({ code: "NOT_FOUND", message: "Tracking link expired or invalid" });
+    }
+    if (new Date(record.expiresAt).getTime() < Date.now()) {
+      return res.status(410).json({ code: "EXPIRED", message: "Tracking link has expired" });
+    }
+    const booking = bookings.get(record.bookingId);
+    if (!booking) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "Booking not found" });
+    }
+    // Return sanitized data only (no customer phone, no payment/fare details)
+    return res.json({
+      status: booking.status,
+      pickup: booking.pickup,
+      drop: booking.drop,
+      driver: booking.driver
+        ? {
+            name: booking.driver.name,
+            vehicleNo: booking.driver.vehicleNo,
+            vehicleClass: booking.driver.vehicleClass,
+            rating: booking.driver.rating,
+          }
+        : null,
+      etaMinutes: 12,
+    });
+  });
+
   // ── Protected Admin Endpoints (SC-B1) ──────────────────────────────────────
   app.get("/admin/stats", requireApiAuth(["admin"]), (_req, res) => {
     res.json({
