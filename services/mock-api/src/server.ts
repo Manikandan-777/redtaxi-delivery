@@ -450,7 +450,41 @@ export function createMockApp() {
     });
   });
 
-  // ── Protected Admin Endpoints (SC-B1) ──────────────────────────────────────
+  // ── Protected Admin Endpoints (SC-B1, Gate 7, T7.1 - T7.12) ───────────────
+  // Audit log entries (in-memory, append-only, tamper resistant)
+  interface AuditEntry {
+    id: string;
+    actor: string;
+    action: string;
+    target: string;
+    before: Record<string, unknown> | null;
+    after: Record<string, unknown> | null;
+    timestamp: string;
+    ip: string;
+  }
+  const auditLogs: AuditEntry[] = [];
+  const logAudit = (
+    req: express.Request,
+    action: string,
+    target: string,
+    before: Record<string, unknown> | null,
+    after: Record<string, unknown> | null
+  ) => {
+    const entry: AuditEntry = {
+      id: `aud_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      actor: (req.headers["x-user-id"] as string) || "admin@redtaxi.com",
+      action,
+      target,
+      before,
+      after,
+      timestamp: new Date().toISOString(),
+      ip: req.ip || "127.0.0.1",
+    };
+    auditLogs.push(entry);
+    return entry;
+  };
+
+  // T7.2 & DEC-6: Stats endpoint
   app.get("/admin/stats", requireApiAuth(["admin"]), (_req, res) => {
     res.json({
       totalBookingsToday: 342,
@@ -461,8 +495,548 @@ export function createMockApp() {
     });
   });
 
-  app.get("/admin/drivers", requireApiAuth(["admin"]), (_req, res) => {
-    res.json([SEED_DRIVER]);
+  // T7.3: Drivers listing with server-side pagination, status filtering, and search
+  app.get("/admin/drivers", requireApiAuth(["admin"]), (req, res) => {
+    const status = req.query.status as string;
+    const search = ((req.query.search as string) || "").toLowerCase();
+    const page = parseInt((req.query.page as string) || "1", 10);
+    const limit = parseInt((req.query.limit as string) || "10", 10);
+
+    const allDrivers = [
+      {
+        id: "drv_1",
+        name: "Selvam Kumar",
+        phone: "9876543210",
+        vehicleNo: "TN 37 BY 1234",
+        vehicleClass: "sedan",
+        status: "approved",
+        rating: 4.8,
+        online: true,
+        distanceKm: 1.2,
+        documents: [
+          {
+            id: "doc_1",
+            documentType: "license",
+            title: "Commercial Driver License",
+            status: "approved",
+          },
+          {
+            id: "doc_2",
+            documentType: "rc",
+            title: "Vehicle Registration Certificate (RC)",
+            status: "approved",
+          },
+          {
+            id: "doc_3",
+            documentType: "insurance",
+            title: "Comprehensive Taxi Insurance",
+            status: "approved",
+          },
+        ],
+      },
+      {
+        id: "drv_2",
+        name: "Arun Kumar",
+        phone: "9876543211",
+        vehicleNo: "TN 37 AB 1234",
+        vehicleClass: "suv",
+        status: "pending",
+        rating: 4.6,
+        online: false,
+        distanceKm: 3.5,
+        documents: [
+          {
+            id: "doc_4",
+            documentType: "license",
+            title: "Commercial Driver License",
+            status: "approved",
+          },
+          {
+            id: "doc_5",
+            documentType: "rc",
+            title: "Vehicle Registration Certificate (RC)",
+            status: "pending",
+          },
+          {
+            id: "doc_6",
+            documentType: "insurance",
+            title: "Comprehensive Taxi Insurance",
+            status: "pending",
+          },
+        ],
+      },
+      {
+        id: "drv_3",
+        name: "Mohan Raj",
+        phone: "9876543212",
+        vehicleNo: "TN 37 CD 5678",
+        vehicleClass: "innova",
+        status: "pending",
+        rating: 4.5,
+        online: false,
+        distanceKm: 4.1,
+        documents: [
+          {
+            id: "doc_7",
+            documentType: "license",
+            title: "Commercial Driver License",
+            status: "pending",
+          },
+          {
+            id: "doc_8",
+            documentType: "rc",
+            title: "Vehicle Registration Certificate (RC)",
+            status: "pending",
+          },
+          {
+            id: "doc_9",
+            documentType: "insurance",
+            title: "Comprehensive Taxi Insurance",
+            status: "pending",
+          },
+        ],
+      },
+      {
+        id: "drv_4",
+        name: "Karthik",
+        phone: "9876543213",
+        vehicleNo: "TN 37 EF 9012",
+        vehicleClass: "hatchback",
+        status: "approved",
+        rating: 4.7,
+        online: true,
+        distanceKm: 6.3,
+        documents: [
+          {
+            id: "doc_10",
+            documentType: "license",
+            title: "Commercial Driver License",
+            status: "approved",
+          },
+          {
+            id: "doc_11",
+            documentType: "rc",
+            title: "Vehicle Registration Certificate (RC)",
+            status: "approved",
+          },
+          {
+            id: "doc_12",
+            documentType: "insurance",
+            title: "Comprehensive Taxi Insurance",
+            status: "approved",
+          },
+        ],
+      },
+      {
+        id: "drv_5",
+        name: "Dinesh",
+        phone: "9876543214",
+        vehicleNo: "TN 37 GH 3456",
+        vehicleClass: "sedan",
+        status: "rejected",
+        rating: 4.1,
+        online: false,
+        distanceKm: 8.2,
+        documents: [
+          {
+            id: "doc_13",
+            documentType: "license",
+            title: "Commercial Driver License",
+            status: "rejected",
+          },
+          {
+            id: "doc_14",
+            documentType: "rc",
+            title: "Vehicle Registration Certificate (RC)",
+            status: "approved",
+          },
+          {
+            id: "doc_15",
+            documentType: "insurance",
+            title: "Comprehensive Taxi Insurance",
+            status: "approved",
+          },
+        ],
+      },
+    ];
+
+    let filtered = allDrivers;
+    if (status && status !== "all") {
+      filtered = filtered.filter((d) => d.status === status);
+    }
+    if (search) {
+      filtered = filtered.filter(
+        (d) =>
+          d.name.toLowerCase().includes(search) ||
+          d.vehicleNo.toLowerCase().includes(search) ||
+          d.vehicleClass.toLowerCase().includes(search)
+      );
+    }
+
+    const startIdx = (page - 1) * limit;
+    const paginated = filtered.slice(startIdx, startIdx + limit);
+
+    return res.json({
+      items: paginated,
+      total: filtered.length,
+      page,
+      limit,
+      totalPages: Math.ceil(filtered.length / limit),
+    });
+  });
+
+  // T7.4: Driver Verification (Approve / Reject) with audit log
+  app.post("/admin/drivers/:id/approve", requireApiAuth(["admin"]), (req, res) => {
+    const { id } = req.params;
+    const { allDocsVerified } = req.body;
+
+    // Approve is disabled unless all documents are verified
+    if (!allDocsVerified) {
+      return res.status(400).json({
+        code: "DOCS_NOT_VERIFIED",
+        message: "Cannot approve driver. All documents must be verified and approved.",
+      });
+    }
+
+    logAudit(req, "driver.approve", `driver:${id}`, { status: "pending" }, { status: "approved" });
+    return res.json({ success: true, id, status: "approved" });
+  });
+
+  app.post("/admin/drivers/:id/reject", requireApiAuth(["admin"]), (req, res) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    if (!reason || typeof reason !== "string" || !reason.trim()) {
+      return res.status(400).json({
+        code: "REASON_REQUIRED",
+        message: "Rejection requires a documented reason.",
+      });
+    }
+
+    logAudit(
+      req,
+      "driver.reject",
+      `driver:${id}`,
+      { status: "pending" },
+      { status: "rejected", reason }
+    );
+    return res.json({ success: true, id, status: "rejected", reason });
+  });
+
+  // T7.5: Admin Booking management with actions (reassign, cancel, refund)
+  app.get("/admin/bookings", requireApiAuth(["admin"]), (req, res) => {
+    const status = req.query.status as string;
+    const search = ((req.query.search as string) || "").toLowerCase();
+
+    let list = Array.from(bookings.values());
+    if (list.length === 0) {
+      // Seed default sample bookings for admin test
+      list = [
+        {
+          id: "bk_10234",
+          code: "BK10234",
+          customer: { id: "c1", name: "Ravi Kumar", phone: "9876543210" },
+          pickup: { label: "Pollachi Bus Stand", lat: 10.658, lng: 77.008 },
+          drop: { label: "Palani Temple, Palani", lat: 10.45, lng: 77.51 },
+          startsAt: "2026-10-10T06:30:00Z",
+          status: "in_progress",
+          driver: SEED_DRIVER,
+          quote: {
+            id: "q1",
+            vehicleId: "veh_sedan_1",
+            mode: "one_way",
+            distanceKm: 65.2,
+            durationMin: 85,
+            lines: [],
+            total: paise(149400),
+            depositOptions: [],
+            validUntil: "2026-10-10T07:00:00Z",
+          },
+          paid: paise(50000),
+          due: paise(99400),
+          timeline: [{ status: "created", at: "2026-10-10T05:30:00Z" }],
+        },
+      ];
+    }
+
+    if (status && status !== "all") {
+      list = list.filter((b) => b.status === status);
+    }
+    if (search) {
+      list = list.filter(
+        (b) =>
+          b.code.toLowerCase().includes(search) ||
+          b.customer.name.toLowerCase().includes(search) ||
+          b.pickup.label.toLowerCase().includes(search) ||
+          b.drop.label.toLowerCase().includes(search)
+      );
+    }
+
+    return res.json({ items: list, total: list.length });
+  });
+
+  app.post("/admin/bookings/:id/reassign", requireApiAuth(["admin"]), (req, res) => {
+    const { id } = req.params;
+    const { driverId, driverName } = req.body;
+    if (!driverId) {
+      return res.status(400).json({ code: "DRIVER_REQUIRED", message: "Driver is required" });
+    }
+
+    logAudit(
+      req,
+      "booking.reassign",
+      `booking:${id}`,
+      { assignedDriver: "previous" },
+      { assignedDriver: driverId, driverName }
+    );
+    return res.json({ success: true, bookingId: id, driverId });
+  });
+
+  app.post("/admin/bookings/:id/refund", requireApiAuth(["admin"]), (req, res) => {
+    const { id } = req.params;
+    const { amountPaise, reason } = req.body;
+    if (!amountPaise || amountPaise <= 0) {
+      return res.status(400).json({ code: "INVALID_AMOUNT", message: "Refund amount must be > 0" });
+    }
+    if (!reason) {
+      return res.status(400).json({ code: "REASON_REQUIRED", message: "Refund reason required" });
+    }
+
+    logAudit(req, "booking.refund", `booking:${id}`, null, { amountPaise, reason });
+    return res.json({ success: true, bookingId: id, amountPaise, refunded: true });
+  });
+
+  // T7.6: Live Dispatch nearby drivers sorted by distance
+  app.get("/admin/dispatch/nearby", requireApiAuth(["admin"]), (req, res) => {
+    const vehicleClass = req.query.vehicleClass as string;
+    const drivers = [
+      {
+        id: "drv_1",
+        name: "Selvam Kumar",
+        vehicleNo: "TN 37 BY 1234",
+        vehicleClass: "sedan",
+        distanceKm: 1.2,
+        online: true,
+        rating: 4.8,
+      },
+      {
+        id: "drv_2",
+        name: "Arun Kumar",
+        vehicleNo: "TN 37 AB 1234",
+        vehicleClass: "suv",
+        distanceKm: 3.5,
+        online: true,
+        rating: 4.6,
+      },
+      {
+        id: "drv_3",
+        name: "Mohan Raj",
+        vehicleNo: "TN 37 CD 5678",
+        vehicleClass: "innova",
+        distanceKm: 4.1,
+        online: true,
+        rating: 4.5,
+      },
+      {
+        id: "drv_4",
+        name: "Karthik",
+        vehicleNo: "TN 37 EF 9012",
+        vehicleClass: "hatchback",
+        distanceKm: 6.3,
+        online: true,
+        rating: 4.7,
+      },
+      {
+        id: "drv_5",
+        name: "Dinesh",
+        vehicleNo: "TN 37 GH 3456",
+        vehicleClass: "sedan",
+        distanceKm: 8.2,
+        online: false,
+        rating: 4.1,
+      },
+    ];
+
+    let filtered = drivers;
+    if (vehicleClass && vehicleClass !== "all") {
+      filtered = filtered.filter((d) => d.vehicleClass === vehicleClass);
+    }
+    // Sort ascending by distance (T7.6)
+    filtered.sort((a, b) => a.distanceKm - b.distanceKm);
+
+    return res.json({ items: filtered });
+  });
+
+  app.post("/admin/bookings/:id/assign", requireApiAuth(["admin"]), (req, res) => {
+    const { id } = req.params;
+    const { driverId } = req.body;
+    if (!driverId) {
+      return res.status(400).json({ code: "DRIVER_REQUIRED", message: "driverId required" });
+    }
+
+    logAudit(req, "dispatch.assign", `booking:${id}`, null, { driverId });
+    return res.json({ success: true, bookingId: id, driverId, status: "driver_assigned" });
+  });
+
+  // T7.7 & T7.8: Pricing Rules with validation and diff tracking
+  app.get("/admin/pricing", requireApiAuth(["admin"]), (_req, res) => {
+    return res.json(Array.from(pricingRules.values()));
+  });
+
+  app.put("/admin/pricing/:vehicleClass", requireApiAuth(["admin"]), (req, res) => {
+    const vehicleClass = req.params.vehicleClass as VehicleClass;
+    const currentRule = pricingRules.get(vehicleClass);
+    if (!currentRule) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "Vehicle class not found" });
+    }
+
+    const {
+      baseRatePerKm,
+      dailyBatta,
+      nightAllowance,
+      minOutstationKm,
+      advanceDepositPercent,
+      minDeposit,
+    } = req.body;
+
+    // Validation (T7.7)
+    if (baseRatePerKm !== undefined && baseRatePerKm <= 0) {
+      return res.status(400).json({ code: "INVALID_RATE", message: "baseRatePerKm must be > 0" });
+    }
+    if (dailyBatta !== undefined && dailyBatta < 0) {
+      return res.status(400).json({ code: "INVALID_BATTA", message: "dailyBatta must be >= 0" });
+    }
+    if (
+      advanceDepositPercent !== undefined &&
+      (advanceDepositPercent < 0 || advanceDepositPercent > 100)
+    ) {
+      return res
+        .status(400)
+        .json({ code: "INVALID_DEPOSIT", message: "advanceDepositPercent must be 0 - 100" });
+    }
+
+    const updatedRule: PricingRule = {
+      ...currentRule,
+      baseRatePerKm: baseRatePerKm !== undefined ? paise(baseRatePerKm) : currentRule.baseRatePerKm,
+      dailyBatta: dailyBatta !== undefined ? paise(dailyBatta) : currentRule.dailyBatta,
+      nightAllowance:
+        nightAllowance !== undefined ? paise(nightAllowance) : currentRule.nightAllowance,
+      minOutstationKm:
+        minOutstationKm !== undefined ? minOutstationKm : currentRule.minOutstationKm,
+      advanceDepositPercent:
+        advanceDepositPercent !== undefined
+          ? advanceDepositPercent
+          : currentRule.advanceDepositPercent,
+      minDeposit: minDeposit !== undefined ? paise(minDeposit) : currentRule.minDeposit,
+    };
+
+    pricingRules.set(vehicleClass, updatedRule);
+    logAudit(
+      req,
+      "pricing.update",
+      `pricing:${vehicleClass}`,
+      currentRule as unknown as Record<string, unknown>,
+      updatedRule as unknown as Record<string, unknown>
+    );
+
+    return res.json({ success: true, rule: updatedRule });
+  });
+
+  // T7.9: Support Tickets sorted by priority (high > medium > low) then age
+  app.get("/admin/tickets", requireApiAuth(["admin"]), (req, res) => {
+    const status = req.query.status as string;
+    const tickets = [
+      {
+        id: "stk_1001",
+        code: "STK1001",
+        title: "Fare dispute - Overcharged",
+        reporter: "customer",
+        priority: "high",
+        status: "open",
+        createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+      },
+      {
+        id: "stk_1002",
+        code: "STK1002",
+        title: "Driver not arriving",
+        reporter: "customer",
+        priority: "medium",
+        status: "open",
+        createdAt: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
+      },
+      {
+        id: "stk_1003",
+        code: "STK1003",
+        title: "Lost item in vehicle",
+        reporter: "customer",
+        priority: "medium",
+        status: "open",
+        createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+      },
+      {
+        id: "stk_1004",
+        code: "STK1004",
+        title: "GPS Drift inquiry",
+        reporter: "driver",
+        priority: "low",
+        status: "resolved",
+        createdAt: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
+      },
+    ];
+
+    let filtered = tickets;
+    if (status && status !== "all") {
+      filtered = filtered.filter((t) => t.status === status);
+    }
+
+    const priorityWeights: Record<string, number> = { high: 3, medium: 2, low: 1 };
+    filtered.sort((a, b) => {
+      const pDiff = (priorityWeights[b.priority] || 0) - (priorityWeights[a.priority] || 0);
+      if (pDiff !== 0) return pDiff;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    return res.json({ items: filtered });
+  });
+
+  app.post("/admin/tickets/:id/resolve", requireApiAuth(["admin"]), (req, res) => {
+    const { id } = req.params;
+    const { note } = req.body;
+    logAudit(
+      req,
+      "ticket.resolve",
+      `ticket:${id}`,
+      { status: "open" },
+      { status: "resolved", note }
+    );
+    return res.json({ success: true, id, status: "resolved", note });
+  });
+
+  // T7.10: Analytics endpoint (completion rate 90.6% for 310/342)
+  app.get("/admin/analytics", requireApiAuth(["admin"]), (_req, res) => {
+    return res.json({
+      period: "Last 7 Days",
+      totalRevenuePaise: 24850000, // ₹2,48,500
+      revenueChangePercent: 12,
+      totalBookings: 342,
+      completedBookings: 310,
+      cancelledBookings: 22,
+      completionRatePercent: 90.6,
+      dailyBreakdown: [
+        { date: "Mon", bookings: 45, completed: 41, revenuePaise: 3250000 },
+        { date: "Tue", bookings: 48, completed: 44, revenuePaise: 3480000 },
+        { date: "Wed", bookings: 52, completed: 48, revenuePaise: 3800000 },
+        { date: "Thu", bookings: 50, completed: 45, revenuePaise: 3650000 },
+        { date: "Fri", bookings: 49, completed: 44, revenuePaise: 3500000 },
+        { date: "Sat", bookings: 53, completed: 47, revenuePaise: 3920000 },
+        { date: "Sun", bookings: 45, completed: 41, revenuePaise: 3250000 },
+      ],
+    });
+  });
+
+  // T7.12: Read-only Audit logs (SC-F6) - no PUT/DELETE endpoints exist
+  app.get("/admin/audit", requireApiAuth(["admin"]), (_req, res) => {
+    return res.json({ items: auditLogs });
   });
 
   // ── Protected Driver Endpoints (SC-B1 & Phase 6) ─────────────────────────
