@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "lint": "eslint app --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "test": "jest --passWithNoTests"
+    "test": "jest --passWithNoTests",
+    "e2e": "jest --passWithNoTests"
   },
   "dependencies": {
     "@redtaxi/shared": "workspace:^",
